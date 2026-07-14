@@ -39,11 +39,14 @@ Modules **must** be listed in the parent's `<modules>` in this exact
 ```
 
 Rule: **do not redeclare a dependency you already get transitively.**
-`<svc>-security` does not redeclare `<svc>-entity`; `<svc>-service` does not
-redeclare `<svc>-shared`. The single exception is `<svc>-api`, which declares
-its three direct dependencies (`service`, `entity`, `security`) explicitly
-even though `entity` and `shared` also arrive transitively — this keeps the
-API module's own `pom.xml` self-documenting about what it assembles.
+`<svc>-security` does not redeclare `<svc>-entity` (it arrives via
+`<svc>-service`). The single exception is `<svc>-api`, which declares all four
+siblings (`service`, `entity`, `security`, `shared`) explicitly even though
+`entity` and `shared` also arrive transitively — the API module uses types
+from each directly (entities in mappers, DTOs in controllers), and declaring
+what it uses keeps its `pom.xml` self-documenting about what it assembles.
+(`<svc>-service` declaring `<svc>-shared` is NOT redundant — `entity` does not
+depend on `shared`, and the service layer serializes event payloads from it.)
 
 ## Packaging plugin
 
