@@ -24,6 +24,18 @@
     <maven.compiler.release>21</maven.compiler.release>
 
     <!--
+      NOT ${project.version}: this POM is inherited via <parent> by every
+      service, and Maven resolves "project.version" against the CONSUMING
+      project's effective model, not this POM's own version — using
+      ${project.version} here would silently import whatever version each
+      service happens to declare (e.g. identity-service's own
+      0.1.0-SNAPSHOT), not platform-dependencies' actual released version.
+      A dedicated property name is immune to that because it isn't one of
+      Maven's reserved project.* expressions.
+    -->
+    <platform-bom.version>0.1.0</platform-bom.version>
+
+    <!--
       BOM import (below) only brings dependencyManagement, not properties,
       so annotation-processor and plugin versions that must match
       platform-dependencies are re-declared here. Keep these in sync with
@@ -46,7 +58,7 @@
       <dependency>
         <groupId>io.github.ttads</groupId>
         <artifactId>platform-dependencies</artifactId>
-        <version>${project.version}</version>
+        <version>${platform-bom.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
