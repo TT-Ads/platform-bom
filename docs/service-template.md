@@ -54,6 +54,21 @@ Only `<svc>-api` applies the `spring-boot-maven-plugin` `repackage` execution
 (`platform-parent` pins the plugin's version but binds no execution — see
 `platform-parent/pom.xml`). No other module produces an executable jar.
 
+**The repackage execution MUST set `<classifier>exec</classifier>`.** Without
+it, `repackage` replaces `target/<finalName>.jar` in place with the executable
+(nested `BOOT-INF/classes/**`) jar — but Failsafe substitutes that same
+artifact path for `target/classes` when it builds the forked test JVM's
+classpath, and a plain classloader cannot see classes nested inside
+`BOOT-INF/`. Any `@SpringBootTest(classes = ...Application.class)`
+integration test then fails to bootstrap with `IllegalStateException: Failed
+to find merged annotation for @BootstrapWith(...)` — Spring silently can't
+resolve the application class literal and drops `@SpringBootTest`'s
+meta-annotations rather than erroring clearly. With the classifier,
+`target/app.jar` stays the plain, classes-mirroring primary artifact (safe
+for Failsafe) and the runnable jar is attached separately as
+`target/app-exec.jar` — **that's the one to run** (`java -jar
+identity-api/target/app-exec.jar`, not `app.jar`).
+
 ```xml
 <build>
   <finalName>app</finalName>
@@ -64,12 +79,30 @@ Only `<svc>-api` applies the `spring-boot-maven-plugin` `repackage` execution
       <executions>
         <execution>
           <goals><goal>repackage</goal></goals>
+          <configuration>
+            <classifier>exec</classifier>
+          </configuration>
         </execution>
       </executions>
     </plugin>
   </plugins>
 </build>
 ```
+
+## Method-security parameter names
+
+If a service uses `@PreAuthorize` with a named-parameter SpEL reference (e.g.
+`@PreAuthorize("@orgAuth.hasRole(#orgId, 'ADMIN')")`), `platform-parent`'s
+compiler plugin already sets `<parameters>true</parameters>` (required since
+Spring Framework 6.1 removed bytecode-debug-info-based parameter name
+discovery — without it, `#orgId` silently resolves to `null` and every such
+check fails closed for every caller, with no error at compile or boot time).
+No per-service action needed; this is documented here because the failure
+mode is silent and easy to mistake for "the annotation just doesn't work
+here" during debugging — write an end-to-end test asserting a legitimately
+privileged caller *succeeds*, not only that an under-privileged one is
+denied, or a fail-closed bug like this reads identical to a passing test
+suite.
 
 ## Packages
 

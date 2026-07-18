@@ -80,6 +80,23 @@
           <version>${maven-compiler-plugin.version}</version>
           <configuration>
             <release>${maven.compiler.release}</release>
+            <!--
+              Required for Spring Security method-security SpEL expressions like
+              @PreAuthorize("...#orgId...") to resolve parameter names at runtime.
+              Spring Framework 6.1 removed LocalVariableTableParameterNameDiscoverer,
+              leaving the "-parameters" class-file attribute as the only remaining
+              source of parameter names; SpEL fails SILENTLY (an unresolvable #var
+              evaluates to null rather than throwing), so without this every
+              @PreAuthorize using a #paramName reference fails closed for every
+              caller, indistinguishable from "working" until an end-to-end test
+              asserts a legitimate, correctly-privileged caller actually succeeds,
+              not just that an under-privileged one is denied. Spring Boot's own
+              parent POM sets this by default; we set it explicitly since
+              platform-parent intentionally does not inherit from it. Discovered via
+              identity-service's T10 OrgAuthorizationEndToEndIT (see its build log
+              for the concrete repro: ADMIN caller measured with orgId=null).
+            -->
+            <parameters>true</parameters>
             <annotationProcessorPaths>
               <path>
                 <groupId>org.projectlombok</groupId>
