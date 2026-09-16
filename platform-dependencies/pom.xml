@@ -27,6 +27,7 @@
   -->
   <properties>
     <flatten-maven-plugin.version>1.7.3</flatten-maven-plugin.version>
+    <jqwik.version>1.9.3</jqwik.version>
     <keycloak-admin-client.version>26.0.10</keycloak-admin-client.version>
     <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
     <lombok.version>1.18.46</lombok.version>
@@ -37,6 +38,7 @@
     <springdoc-openapi.version>2.8.17</springdoc-openapi.version>
     <testcontainers-keycloak.version>3.9.1</testcontainers-keycloak.version>
     <testcontainers.version>1.21.4</testcontainers.version>
+    <wiremock.version>3.13.2</wiremock.version>
   </properties>
 
   <dependencyManagement>
@@ -81,6 +83,13 @@
         <version>${springdoc-openapi.version}</version>
       </dependency>
 
+      <!-- springdoc OpenAPI UI for WebFlux services (e.g. api-gateway), same release as the webmvc starter above. -->
+      <dependency>
+        <groupId>org.springdoc</groupId>
+        <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+        <version>${springdoc-openapi.version}</version>
+      </dependency>
+
       <!-- Lombok, compile-time only (annotation processor). -->
       <dependency>
         <groupId>org.projectlombok</groupId>
@@ -122,6 +131,22 @@
         <groupId>com.github.dasniko</groupId>
         <artifactId>testcontainers-keycloak</artifactId>
         <version>${testcontainers-keycloak.version}</version>
+        <scope>test</scope>
+      </dependency>
+
+      <!-- WireMock standalone (all-in-one jar), for stubbing downstream HTTP calls in tests. -->
+      <dependency>
+        <groupId>org.wiremock</groupId>
+        <artifactId>wiremock-standalone</artifactId>
+        <version>${wiremock.version}</version>
+        <scope>test</scope>
+      </dependency>
+
+      <!-- jqwik, property-based testing on JUnit 5. -->
+      <dependency>
+        <groupId>net.jqwik</groupId>
+        <artifactId>jqwik</artifactId>
+        <version>${jqwik.version}</version>
         <scope>test</scope>
       </dependency>
 

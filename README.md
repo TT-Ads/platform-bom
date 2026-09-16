@@ -8,9 +8,9 @@ AdPilot microservice depends on:
 - **`platform-dependencies`** (`io.github.ttads:platform-dependencies:0.1.0`) —
   a pure BOM. `dependencyManagement` only, no plugins, no build section. It
   imports the Spring Boot, Spring Cloud, and Testcontainers BOMs and pins
-  the handful of libraries every service needs (springdoc, Lombok,
-  MapStruct, Keycloak admin client, etc.), each version expressed as a
-  single property.
+  the handful of libraries every service needs (springdoc for both MVC and
+  WebFlux, Lombok, MapStruct, Keycloak admin client, WireMock standalone,
+  jqwik, etc.), each version expressed as a single property.
 - **`platform-parent`** (`io.github.ttads:platform-parent:0.1.0`) — the
   parent POM every service's root `pom.xml` inherits from. It imports
   `platform-dependencies` and centralizes all plugin configuration
