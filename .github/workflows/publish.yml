@@ -20,6 +20,13 @@ name: publish
 on:
   push:
     branches: [main]
+    # A change that cannot alter the published POMs does not mint a version.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '.gitattributes'
+      - '.gitignore'
+      - '.dockerignore'
   workflow_dispatch:
 
 permissions:
