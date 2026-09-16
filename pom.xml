@@ -6,7 +6,16 @@
 
   <groupId>io.github.ttads</groupId>
   <artifactId>platform-bom</artifactId>
-  <version>0.1.0</version>
+  <!--
+    CI-friendly version. The real number is computed by .github/workflows/publish.yml
+    from the published git tags (0.<series>.<n>, see .platform-series) and passed as
+    -Drevision=...; the default below only serves a local `mvn install`. flatten-maven-plugin
+    (below) bakes the resolved literal into the POM that is installed/deployed, so no
+    consumer ever sees the expression. Every module of this reactor is versioned the same
+    way and carries its own copy of the flatten plugin, because none of them has a parent
+    to inherit it from.
+  -->
+  <version>${revision}</version>
   <packaging>pom</packaging>
 
   <name>AdPilot Platform BOM</name>
@@ -18,6 +27,8 @@
   </description>
 
   <properties>
+    <revision>0.0.0-SNAPSHOT</revision>
+    <flatten-maven-plugin.version>1.7.3</flatten-maven-plugin.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
   </properties>
@@ -26,5 +37,36 @@
     <module>platform-dependencies</module>
     <module>platform-parent</module>
   </modules>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>flatten-maven-plugin</artifactId>
+        <version>${flatten-maven-plugin.version}</version>
+        <configuration>
+          <updatePomFile>true</updatePomFile>
+          <!-- Resolve ${revision} and touch nothing else. -->
+          <flattenMode>resolveCiFriendliesOnly</flattenMode>
+        </configuration>
+        <executions>
+          <execution>
+            <id>flatten</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>flatten</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>flatten-clean</id>
+            <phase>clean</phase>
+            <goals>
+              <goal>clean</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 
 </project>
