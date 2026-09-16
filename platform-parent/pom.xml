@@ -7,7 +7,8 @@
   <!-- No parent: this POM is the top of the inheritance chain for every AdPilot service. -->
   <groupId>io.github.ttads</groupId>
   <artifactId>platform-parent</artifactId>
-  <version>0.1.0</version>
+  <!-- CI-friendly version; see the root pom.xml for how it is computed and flattened. -->
+  <version>${revision}</version>
   <packaging>pom</packaging>
 
   <name>AdPilot Platform Parent</name>
@@ -24,16 +25,30 @@
     <maven.compiler.release>21</maven.compiler.release>
 
     <!--
-      NOT ${project.version}: this POM is inherited via <parent> by every
-      service, and Maven resolves "project.version" against the CONSUMING
-      project's effective model, not this POM's own version — using
-      ${project.version} here would silently import whatever version each
-      service happens to declare (e.g. identity-service's own
-      0.1.0-SNAPSHOT), not platform-dependencies' actual released version.
-      A dedicated property name is immune to that because it isn't one of
-      Maven's reserved project.* expressions.
+      The version of platform-dependencies this parent imports (below) is
+      ${revision}, the same CI-friendly property that versions this POM, and
+      NOTHING ELSE may stand in for it:
+
+      - Not ${project.version}: this POM is inherited via <parent> by every
+        service, and Maven resolves project.* against the CONSUMING project's
+        effective model, so it would import whatever version each service
+        happens to declare, not platform-dependencies' released version.
+      - Not a dedicated property such as platform-bom.version either: a
+        property reference stays a live expression in the published POM, and
+        a consumer that defines a property of the same name overrides the
+        parent's value (verified: a consumer setting platform-bom.version to
+        9.9.9 made this POM import platform-dependencies:9.9.9 and fail at
+        model-build time). Property names are not a namespace.
+
+      What makes ${revision} safe is not the name but flatten-maven-plugin:
+      the published POM carries the resolved LITERAL in both <version> and
+      the import below, so there is no expression left for a consumer to
+      shadow. The invariant to keep is "the published import coordinate is a
+      literal", and the flatten execution at the bottom of this file is what
+      guarantees it.
     -->
-    <platform-bom.version>0.1.0</platform-bom.version>
+    <revision>0.0.0-SNAPSHOT</revision>
+    <flatten-maven-plugin.version>1.7.3</flatten-maven-plugin.version>
 
     <!--
       BOM import (below) only brings dependencyManagement, not properties,
@@ -58,7 +73,7 @@
       <dependency>
         <groupId>io.github.ttads</groupId>
         <artifactId>platform-dependencies</artifactId>
-        <version>${platform-bom.version}</version>
+        <version>${revision}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -201,6 +216,41 @@
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
+      </plugin>
+
+      <!--
+        Bakes the CI-computed ${revision} into the POM that is installed and
+        deployed (see the properties comment above). inherited=false is
+        load-bearing: everything else in this <plugins> block runs in every
+        service, but flatten must run only on this reactor. A service versions
+        itself however it likes and must not have its installed POM rewritten
+        by a plugin it never asked for.
+      -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>flatten-maven-plugin</artifactId>
+        <version>${flatten-maven-plugin.version}</version>
+        <inherited>false</inherited>
+        <configuration>
+          <updatePomFile>true</updatePomFile>
+          <flattenMode>resolveCiFriendliesOnly</flattenMode>
+        </configuration>
+        <executions>
+          <execution>
+            <id>flatten</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>flatten</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>flatten-clean</id>
+            <phase>clean</phase>
+            <goals>
+              <goal>clean</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

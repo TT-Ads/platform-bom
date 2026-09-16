@@ -4,6 +4,59 @@ This document is the canonical layout for a new AdPilot service. Stamp a new
 service (`<svc>`) by copying this structure and swapping the `<svc>` token —
 do not invent a different shape per service.
 
+## Parent and registry
+
+The root `pom.xml` of a service names `platform-parent` by a literal, published
+version and declares the registry it comes from. No `settings.xml` repository
+entry is needed anywhere — a POM's own `<repositories>` block resolves its
+parent on Maven 3.9 (verified). Only the credential lives in `settings.xml`;
+see the README of `platform-bom`.
+
+```xml
+<parent>
+  <groupId>io.github.ttads</groupId>
+  <artifactId>platform-parent</artifactId>
+  <version>0.1.1</version> <!-- a v* tag of TT-Ads/platform-bom; bump in its own PR -->
+  <relativePath/>
+</parent>
+
+<groupId>io.github.ttads</groupId>
+<artifactId><svc>-parent</artifactId> <!-- not <svc>: a module carries that name -->
+<version>0.1.0-SNAPSHOT</version>
+<packaging>pom</packaging>
+
+<repositories>
+  <repository>
+    <id>github</id>
+    <url>https://maven.pkg.github.com/tt-ads/platform-bom</url>
+    <snapshots>
+      <enabled>false</enabled>
+    </snapshots>
+  </repository>
+</repositories>
+```
+
+The reactor's own artifactId is `<svc>-parent`: Maven refuses an aggregator
+and a submodule sharing `groupId:artifactId`, and the `<svc>-service` module
+already takes the bare name.
+
+Commit `.mvn/ci-settings.xml` (a credential *template*, never a credential):
+
+```xml
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+  <servers>
+    <server>
+      <id>github</id>
+      <username>${env.GITHUB_ACTOR}</username>
+      <password>${env.GITHUB_TOKEN}</password>
+    </server>
+  </servers>
+</settings>
+```
+
+CI and Docker builds pass `-s .mvn/ci-settings.xml` with the two variables
+set; a laptop keeps the same `<server>` in `~/.m2/settings.xml` instead.
+
 ## Module layout
 
 Every service is a 5-module Maven reactor, parented by `platform-parent`.
@@ -186,7 +239,7 @@ public class Widget {
   (or wherever the service's Boot app owns its `DataSource`).
 - Row-Level Security (RLS) policies are applied on every tenant-scoped table.
 - Where a service produces domain events, it uses the transactional outbox
-  pattern (an `outbox_event` table written in the same transaction as the
+  pattern (an `outbox` table written in the same transaction as the
   business change, drained by a poller) rather than dual-writing to the
   database and a broker.
 
@@ -206,3 +259,95 @@ public class Widget {
   in place.
 - The deprecated version responds with a `Deprecation` header and a
   documented sunset date before removal.
+
+## Continuous integration
+
+Every service runs the one reusable workflow published from `TT-Ads/.github`
+and commits only this caller (`.github/workflows/ci.yml`):
+
+```yaml
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  ci:
+    uses: TT-Ads/.github/.github/workflows/maven-service-ci.yml@v1
+    with:
+      image-name: <svc>
+      api-module: <svc>-api
+    secrets: inherit
+```
+
+The reusable workflow checks out, sets up Java 21 with a Maven cache and the
+`github` server credentials from the caller's own `GITHUB_TOKEN`, runs
+`mvn -B verify` (Surefire unit tests, then Failsafe Testcontainers
+integration tests — a Docker daemon is available on `ubuntu-latest`), and on
+`main` builds the image and pushes it to `ghcr.io/tt-ads/<svc>`. Pin the
+workflow by tag (`@v1`), never `@main`.
+
+## Docker
+
+The build context is the service repository itself — never a parent
+directory. The parent POM comes from the registry, and the registry token
+enters the build as a BuildKit secret (an `ARG` would be recorded in the
+image history):
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM maven:3.9-eclipse-temurin-21 AS builder
+WORKDIR /build
+ARG GITHUB_ACTOR=docker-build
+COPY .mvn/ci-settings.xml .mvn/ci-settings.xml
+COPY pom.xml .
+COPY <svc>-shared/pom.xml <svc>-shared/
+COPY <svc>-entity/pom.xml <svc>-entity/
+COPY <svc>-service/pom.xml <svc>-service/
+COPY <svc>-security/pom.xml <svc>-security/
+COPY <svc>-api/pom.xml <svc>-api/
+RUN --mount=type=secret,id=gh_token,env=GITHUB_TOKEN \
+    mvn -B -s .mvn/ci-settings.xml -pl <svc>-api -am dependency:go-offline
+COPY <svc>-shared/src <svc>-shared/src
+COPY <svc>-entity/src <svc>-entity/src
+COPY <svc>-service/src <svc>-service/src
+COPY <svc>-security/src <svc>-security/src
+COPY <svc>-api/src <svc>-api/src
+RUN --mount=type=secret,id=gh_token,env=GITHUB_TOKEN \
+    mvn -B -s .mvn/ci-settings.xml -pl <svc>-api -am clean package -DskipTests
+
+FROM eclipse-temurin:21-jre-jammy
+# ... unprivileged user, HEALTHCHECK on /actuator/health, `exec java` entrypoint
+COPY --from=builder /build/<svc>-api/target/app-exec.jar /app.jar
+```
+
+Build it with `docker build --secret id=gh_token,env=GITHUB_TOKEN .`, or from
+`docker-compose.yml` with:
+
+```yaml
+services:
+  <svc>-api:
+    build:
+      context: .
+      secrets: [gh_token]
+secrets:
+  gh_token:
+    environment: GITHUB_TOKEN
+```
+
+In GitHub Actions, `docker/build-push-action` takes the same secret through
+its `secrets:` input (`gh_token=${{ secrets.GITHUB_TOKEN }}`).
+
+## Local setup
+
+A fresh machine needs two things before `mvn` or `docker compose build`
+works: a token with `read:packages`, and the `github` server entry in
+`~/.m2/settings.xml`. Each service ships `scripts/dev-setup.sh` (Git Bash
+compatible) that checks `GITHUB_TOKEN` is set (taking it from `gh auth token`
+after `gh auth refresh -s read:packages` when the CLI is present), merges the
+`<server>` entry into `~/.m2/settings.xml` without clobbering existing
+entries, and proves parent resolution with `mvn -q help:effective-pom` so the
+first failure is a one-line message rather than a 40-line
+`Non-resolvable parent POM`. Someone who only *runs* services needs no Java
+at all: `docker login ghcr.io` with the same token, then `docker compose up`
+against the image CI pushed.

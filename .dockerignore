@@ -1,9 +1,8 @@
 # platform-bom has no Dockerfile of its own -- it's a shared parent POM, not a
 # deployable service, and never produces its own image. This exists for consistency
-# with every other AdPilot repo and in case that ever changes. Note it has no effect
-# on identity-service's build even though that build consumes this repo's sources:
-# Docker only reads .dockerignore from the build CONTEXT root, and identity-service's
-# context is the monorepo root (../.dockerignore), not this directory.
+# with every other AdPilot repo and in case that ever changes. Services consume this
+# repository's artifacts from the GitHub Packages Maven registry (see README.md), never
+# from its source tree, so no service image build ever reads this directory.
 
 .git
 .gitignore
@@ -14,6 +13,7 @@
 # Build output -- built fresh from source inside the image, never copied in
 **/target/
 **/*.log
+**/.flattened-pom.xml
 
 # Documentation -- not a build input
 docs/
