@@ -271,6 +271,11 @@ on:
   pull_request:
   push:
     branches: [main]
+# A called workflow can only downgrade the caller's GITHUB_TOKEN permissions, never
+# raise them; without this block the run ends in startup_failure.
+permissions:
+  contents: read
+  packages: write
 jobs:
   ci:
     uses: TT-Ads/.github/.github/workflows/maven-service-ci.yml@v1
