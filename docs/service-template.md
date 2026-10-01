@@ -16,7 +16,7 @@ see the README of `platform-bom`.
 <parent>
   <groupId>io.github.ttads</groupId>
   <artifactId>platform-parent</artifactId>
-  <version>0.1.1</version> <!-- a v* tag of TT-Ads/platform-bom; bump in its own PR -->
+  <version>0.1.3</version> <!-- a v* tag of TT-Ads/platform-bom; bump in its own PR -->
   <relativePath/>
 </parent>
 
@@ -285,12 +285,107 @@ jobs:
     secrets: inherit
 ```
 
+To release (see "Release publishing"), the caller also lists `tags: ['v*']` under `push` and passes
+`shared-module: <svc>-shared`. **Add both only once `v1` points at v1.1.0 or later**: before that an unknown
+input fails the run.
+
 The reusable workflow checks out, sets up Java 21 with a Maven cache and the
 `github` server credentials from the caller's own `GITHUB_TOKEN`, runs
 `mvn -B verify` (Surefire unit tests, then Failsafe Testcontainers
 integration tests — a Docker daemon is available on `ubuntu-latest`), and on
-`main` builds the image and pushes it to `ghcr.io/tt-ads/<svc>`. Pin the
+`main` builds the image and pushes it to `ghcr.io/tt-ads/<svc>`. On a `v*` tag it promotes the image `main`
+built for that commit to `:X.Y.Z` (and `:X.Y`), and publishes `<svc>-shared` when `shared-module` is set. Pin the
 workflow by tag (`@v1`), never `@main`.
+
+## Release publishing
+
+A `v*` tag publishes `<svc>-shared` (and the reactor root it inherits from) to **this service repository's own**
+Maven registry, `maven.pkg.github.com/tt-ads/<repo>` (not platform-bom's), at the tag's version. That needs the
+POMs to take their version from `${revision}`.
+
+Root `pom.xml`:
+
+```xml
+<artifactId><svc>-parent</artifactId>
+<version>${revision}</version>
+<properties>
+  <!-- REQUIRED, never remove: without it the reactor inherits platform-parent's own
+       <revision>0.0.0-SNAPSHOT</revision>, so a local build silently becomes 0.0.0-SNAPSHOT.
+       CI passes -Drevision=<tag>. -->
+  <revision>0.1.0-SNAPSHOT</revision>
+  <flatten-maven-plugin.version>1.7.3</flatten-maven-plugin.version>
+</properties>
+<build>
+  <plugins>
+    <!-- platform-parent's own flatten is inherited=false, so each service declares one: it bakes
+         the resolved ${revision} into every installed/deployed POM. -->
+    <plugin>
+      <groupId>org.codehaus.mojo</groupId>
+      <artifactId>flatten-maven-plugin</artifactId>
+      <version>${flatten-maven-plugin.version}</version>
+      <configuration>
+        <updatePomFile>true</updatePomFile>
+        <flattenMode>resolveCiFriendliesOnly</flattenMode>
+      </configuration>
+      <executions>
+        <execution><id>flatten</id><phase>process-resources</phase><goals><goal>flatten</goal></goals></execution>
+        <execution><id>flatten-clean</id><phase>clean</phase><goals><goal>clean</goal></goals></execution>
+      </executions>
+    </plugin>
+  </plugins>
+</build>
+```
+
+Every module: `<parent><version>${revision}</version></parent>`, no `<version>` of its own, and sibling
+dependencies via `${project.version}` (never a hard-coded `0.1.0-SNAPSHOT`). Add `.flattened-pom.xml` to
+`.gitignore` and `.dockerignore`. No `distributionManagement` and no `maven.deploy.skip`: the workflow passes the
+registry URL and builds only `-pl <svc>-shared -am`.
+
+The caller from "Continuous integration" gains `tags: ['v*']` and `shared-module: <svc>-shared`. Before
+publishing, the workflow checks that
+`mvn -Drevision=<version> -pl <svc>-shared help:evaluate -Dexpression=project.version -DforceStdout` prints the
+tag's version, so a service without `${revision}` fails instead of publishing a SNAPSHOT. Dry run locally:
+
+```bash
+mvn -B -Drevision=0.2.0 -pl <svc>-shared -am deploy -DskipTests \
+  -DaltDeploymentRepository=local::file:$PWD/target/release-repo
+```
+
+Re-publishing a version fails with `409` by design. A private service's package can be read by another repo only
+with a classic PAT with `read:packages`, not by that repo's `GITHUB_TOKEN`.
+
+## Dependabot
+
+Each service keeps `platform-parent` current with `.github/dependabot.yml` (read from the default branch). The
+registry needs a classic PAT with `read:packages` as org **Dependabot** secrets `PACKAGES_READ_USER` and
+`PACKAGES_READ_TOKEN`:
+
+```yaml
+version: 2
+registries:
+  platform-bom:
+    type: maven-repository
+    url: https://maven.pkg.github.com/tt-ads/platform-bom
+    username: ${{secrets.PACKAGES_READ_USER}}
+    password: ${{secrets.PACKAGES_READ_TOKEN}}
+updates:
+  - package-ecosystem: maven
+    directory: /
+    registries:
+      - platform-bom
+    schedule:
+      interval: daily
+    allow:
+      - dependency-name: io.github.ttads:platform-parent
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: build
+    labels:
+      - dependencies
+```
+
+`allow` limits it to the parent; other bumps belong to platform-bom. A series bump (0.1 → 0.2) is proposed like
+any version and is breaking at `0.x`; its CI result is the signal.
 
 ## Docker
 
