@@ -357,8 +357,9 @@ with a classic PAT with `read:packages`, not by that repo's `GITHUB_TOKEN`.
 ## Dependabot
 
 Each service keeps `platform-parent` current with `.github/dependabot.yml` (read from the default branch). The
-registry needs a classic PAT with `read:packages` as org **Dependabot** secrets `PACKAGES_READ_USER` and
-`PACKAGES_READ_TOKEN`:
+registry needs a classic PAT with `read:packages` as repo-level **Dependabot** secrets `PACKAGES_READ_USER` and
+`PACKAGES_READ_TOKEN` in each service repo (TT-Ads is on GitHub Free, where org secrets cannot be shared with
+private repositories; Andrej's `scripts/set-dependabot-secrets.sh` sets them). Actions needs no such secret in v1. The registry entry:
 
 ```yaml
 version: 2
