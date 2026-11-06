@@ -442,6 +442,20 @@ the layers the Dockerfile controls go (the runtime stage's `apt-get install curl
 `package-ecosystem: docker` on `/`, which proposes a PR when the tag's digest changes; bump all services to the
 same pair and update the table above in the same round. Renovate users: `pinDigests: true` does the same.
 
+**Proof (api-gateway, omen, 2026-11-06):** two `--no-cache` builds with the pinned bases and the timestamp set gave a
+byte-identical jar. Layer mtimes (`useradd`, `WORKDIR`) and the BuildKit provenance attestation still carry the build
+time, so for an identical digest build with
+
+```sh
+SOURCE_DATE_EPOCH=1767225600 docker buildx build --provenance=false --sbom=false \
+  --secret id=gh_token,env=GITHUB_TOKEN \
+  --output type=docker,name=<svc>:ci,rewrite-timestamp=true .
+```
+
+Both builds produced `sha256:79b94966b84834bbd91f3c9789dee9695e630723b6ddadc288cfa76789df700e`. Known residue:
+`/etc/shadow` records the day `useradd` ran (days since epoch), so builds on different days differ until that
+layer is made deterministic; `apt-get install curl` follows the mirrors.
+
 Build it with `docker build --secret id=gh_token,env=GITHUB_TOKEN .`, or from
 `docker-compose.yml` with:
 
