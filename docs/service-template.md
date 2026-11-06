@@ -396,7 +396,7 @@ image history):
 
 ```dockerfile
 # syntax=docker/dockerfile:1
-FROM maven:3.9-eclipse-temurin-21 AS builder
+FROM maven:3.9-eclipse-temurin-21@sha256:99e61abcff91a9b1333463bd8451fb18495d6eba9250ac66a338b518f8278320 AS builder
 WORKDIR /build
 ARG GITHUB_ACTOR=docker-build
 COPY .mvn/ci-settings.xml .mvn/ci-settings.xml
@@ -416,10 +416,31 @@ COPY <svc>-api/src <svc>-api/src
 RUN --mount=type=secret,id=gh_token,env=GITHUB_TOKEN \
     mvn -B -s .mvn/ci-settings.xml -pl <svc>-api -am clean package -DskipTests
 
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:21-jre-jammy@sha256:1eac8b8fee11ca7d6725a48bc5d41992ed1561504ebae25490d2d062847e8269
 # ... unprivileged user, HEALTHCHECK on /actuator/health, `exec java` entrypoint
 COPY --from=builder /build/<svc>-api/target/app-exec.jar /app.jar
 ```
+
+### Pinned base images and reproducible jars
+
+Both `FROM` lines carry a digest (`tag@sha256:...`, the multi-arch index digest, so amd64 and arm64 hosts
+resolve the same pin). Every service uses the same two digests, recorded here as the single source of truth:
+
+| Stage | Image | Digest (pinned 2026-11-06) |
+| --- | --- | --- |
+| build | `maven:3.9-eclipse-temurin-21` | `sha256:99e61abcff91a9b1333463bd8451fb18495d6eba9250ac66a338b518f8278320` |
+| runtime | `eclipse-temurin:21-jre-jammy` | `sha256:1eac8b8fee11ca7d6725a48bc5d41992ed1561504ebae25490d2d062847e8269` |
+
+The tag stays in the line for readers; Docker ignores it once a digest is present. Without the digest, an upstream
+republish of the tag changed the api-gateway image between two builds of the same commit (D-73).
+
+The jar is made reproducible by `project.build.outputTimestamp`, set in `platform-parent` (version after 0.1.3):
+services inherit it and need no setting of their own. Together the two give one image digest per commit, as far as
+the layers the Dockerfile controls go (the runtime stage's `apt-get install curl` still follows the Ubuntu mirrors).
+
+**Bumping:** digests move only on purpose. Each service's `.github/dependabot.yml` gets a second entry,
+`package-ecosystem: docker` on `/`, which proposes a PR when the tag's digest changes; bump all services to the
+same pair and update the table above in the same round. Renovate users: `pinDigests: true` does the same.
 
 Build it with `docker build --secret id=gh_token,env=GITHUB_TOKEN .`, or from
 `docker-compose.yml` with:

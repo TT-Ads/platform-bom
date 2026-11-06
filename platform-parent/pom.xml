@@ -25,6 +25,15 @@
     <maven.compiler.release>21</maven.compiler.release>
 
     <!--
+      Reproducible builds: maven-jar-plugin and spring-boot-maven-plugin stamp every
+      archive entry (and the repackaged fat jar) with this instant instead of the build
+      time, so two builds of one commit yield a byte-identical jar and, with pinned base
+      images, the same image digest (D-73). A fixed instant is deliberate: it changes
+      only when someone edits it, not with every commit.
+    -->
+    <project.build.outputTimestamp>2026-01-01T00:00:00Z</project.build.outputTimestamp>
+
+    <!--
       The version of platform-dependencies this parent imports (below) is
       ${revision}, the same CI-friendly property that versions this POM, and
       NOTHING ELSE may stand in for it:
